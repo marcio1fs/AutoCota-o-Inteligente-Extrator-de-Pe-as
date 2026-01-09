@@ -1,0 +1,5 @@
+{
+  "name": "AutoCotação Inteligente Extrator de Peças",
+  "description": "Uma plataforma inteligente para processamento e comparação de cotações de peças automotivas, utilizando a API Gemini para extração de dados estruturados a partir de textos complexos.",
+  "requestFramePermissions": []
+}
