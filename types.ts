@@ -5,7 +5,7 @@ export interface QuoteItem {
   marca: string | null;
   nome_fornecedor: string | null;
   preco_unitario: number | null;
-  selected?: boolean; // Novo campo para o carrinho de compras
+  selected?: boolean;
 }
 
 export interface BestOffer {
@@ -18,6 +18,5 @@ export interface BestOffer {
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   EXTRACTOR = 'EXTRACTOR',
-  COMPARISON = 'COMPARISON',
-  ORDERS = 'ORDERS' // Nova view para pedidos selecionados
+  COMPARISON = 'COMPARISON'
 }
