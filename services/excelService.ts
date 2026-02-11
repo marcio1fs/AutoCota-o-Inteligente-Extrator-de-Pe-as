@@ -18,13 +18,15 @@ export const exportToExcel = (allItems: QuoteItem[]) => {
     'PRODUTO': item.nome_produto,
     'MARCA': item.marca || 'N/A',
     'FORNECEDOR': item.nome_fornecedor || 'Desconhecido',
+    'EMAIL': item.email_fornecedor || '',
+    'TELEFONE': item.telefone_fornecedor || '',
     'PREÇO UNITÁRIO': item.preco_unitario,
     'DATA EXTRAÇÃO': new Date().toLocaleDateString('pt-BR')
   }));
 
   const mapSheet = XLSX.utils.json_to_sheet(mapData);
   mapSheet['!cols'] = [
-    { wch: 12 }, { wch: 45 }, { wch: 15 }, { wch: 30 }, { wch: 18 }, { wch: 15 }
+    { wch: 12 }, { wch: 45 }, { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 15 }
   ];
   XLSX.utils.book_append_sheet(workbook, mapSheet, 'Mapa de Preços');
 

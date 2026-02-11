@@ -2,7 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { QuoteItem } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Inicialização segura para evitar crash se a API Key estiver faltando
+const apiKey = process.env.API_KEY || 'dummy_key_for_init';
+const ai = new GoogleGenAI({ apiKey });
 
 const QUOTE_SCHEMA = {
   type: Type.ARRAY,
@@ -20,6 +22,14 @@ const QUOTE_SCHEMA = {
       nome_fornecedor: {
         type: Type.STRING,
         description: "Empresa que enviou o orçamento.",
+      },
+      email_fornecedor: {
+        type: Type.STRING,
+        description: "Email do fornecedor para contato, se disponível no documento.",
+      },
+      telefone_fornecedor: {
+        type: Type.STRING,
+        description: "Telefone do fornecedor para contato, se disponível no documento.",
       },
       preco_unitario: {
         type: Type.NUMBER,

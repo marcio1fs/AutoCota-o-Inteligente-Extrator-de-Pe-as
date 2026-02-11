@@ -5,14 +5,16 @@ import QuoteExtractor from './components/QuoteExtractor';
 import QuoteTable from './components/QuoteTable';
 import ComparisonView from './components/ComparisonView';
 import Chatbot from './components/Chatbot';
+import OrderSummary from './components/OrderSummary';
 import { QuoteItem, AppView } from './types';
 // Fixed missing ShoppingCart import
-import { Package, DollarSign, FileSpreadsheet, Download, MessageSquare, ShoppingCart } from 'lucide-react';
+import { Package, DollarSign, FileSpreadsheet, Download, MessageSquare, ShoppingCart, Send } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('auto_quotes_v2');
@@ -89,6 +91,16 @@ const App: React.FC = () => {
                 <p className="text-lg font-black text-slate-900 leading-tight">R$ {cartValue.toLocaleString('pt-BR')}</p>
               </div>
             </div>
+
+            {selectedItems.length > 0 && (
+              <button 
+                onClick={() => setIsOrderSummaryOpen(true)}
+                className="bg-emerald-600 text-white px-6 py-3 rounded-2xl flex items-center gap-3 font-bold hover:bg-emerald-700 hover:-translate-y-1 transition-all shadow-xl shadow-emerald-900/20"
+              >
+                <Send size={20} />
+                <span>Finalizar Pedido</span>
+              </button>
+            )}
             
             <button 
               onClick={() => setIsChatOpen(!isChatOpen)}
@@ -124,7 +136,18 @@ const App: React.FC = () => {
         {view === AppView.EXTRACTOR && <QuoteExtractor onItemsExtracted={handleItemsExtracted} />}
         {view === AppView.COMPARISON && <ComparisonView items={items} toggleSelection={toggleSelection} selectAllWinners={selectWinners} />}
         
-        {isChatOpen && <Chatbot isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} items={items} />}
+        {isChatOpen && (
+          <div className="fixed bottom-6 right-6 w-96 z-50">
+             <Chatbot isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} items={items} />
+          </div>
+        )}
+
+        {isOrderSummaryOpen && (
+          <OrderSummary 
+            items={selectedItems} 
+            onClose={() => setIsOrderSummaryOpen(false)} 
+          />
+        )}
       </main>
     </div>
   );

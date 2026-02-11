@@ -4,6 +4,8 @@ export interface QuoteItem {
   nome_produto: string | null;
   marca: string | null;
   nome_fornecedor: string | null;
+  email_fornecedor?: string | null;
+  telefone_fornecedor?: string | null;
   preco_unitario: number | null;
   selected?: boolean;
 }

@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { Trophy, ShieldCheck, ShoppingCart, Store, CheckCircle2, Lightbulb, Scale, Zap, Layers, Activity, Wrench, Thermometer, Sun, Package, ArrowDownRight, TrendingUp, ChevronRight, FileSpreadsheet, Mail, Download, Percent, AlertTriangle } from 'lucide-react';
 import { QuoteItem } from '../types';
 import { exportToExcel, exportSupplierOrder } from '../services/excelService';
+import { generateMailtoLink } from '../services/emailService';
 
 interface ComparisonViewProps {
   items: QuoteItem[];
@@ -124,19 +125,12 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
   };
 
   const sendEmailToSupplier = (supplier: string, supplierItems: QuoteItem[]) => {
-    const subject = encodeURIComponent(`Pedido de Peças - AutoQuote AI - Ref: ${new Date().toLocaleDateString('pt-BR')}`);
-    const itemsList = supplierItems.map(i => `- ${i.nome_produto} (${i.marca}): ${formatCurrency(i.preco_unitario)}`).join('%0D%0A');
-    const total = supplierItems.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
-    
-    const body = encodeURIComponent(
-      `Olá, Equipe ${supplier},%0D%0A%0D%0AGostaria de formalizar o pedido das seguintes peças cotadas via AutoQuote AI:%0D%0A%0D%0A${itemsList}%0D%0A%0D%0ATOTAL DO PEDIDO: ${formatCurrency(total)}%0D%0A%0D%0APor favor, confirmem a disponibilidade e enviem o link de pagamento ou boleto.%0D%0A%0D%0AAtenciosamente,%0D%0AOficina Parceira`
-    );
-
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    const email = supplierItems.find(i => i.email_fornecedor)?.email_fornecedor;
+    window.location.href = generateMailtoLink(supplier, email, supplierItems);
   };
 
   const downloadAllOrders = () => {
-    Object.entries(selectedBySupplier).forEach(([supplier, supplierItems], index) => {
+    (Object.entries(selectedBySupplier) as [string, QuoteItem[]][]).forEach(([supplier, supplierItems], index) => {
       setTimeout(() => {
         exportSupplierOrder(supplier, supplierItems);
       }, index * 500);
@@ -326,7 +320,7 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {Object.entries(selectedBySupplier).map(([supplier, supplierItems]) => {
+            {(Object.entries(selectedBySupplier) as [string, QuoteItem[]][]).map(([supplier, supplierItems]) => {
               const total = supplierItems.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
               return (
                 <div key={supplier} className="bg-white/5 border border-white/10 p-6 rounded-[2rem] hover:bg-white/10 transition-all group">
