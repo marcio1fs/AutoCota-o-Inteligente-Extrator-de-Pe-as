@@ -240,6 +240,20 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
     return BRL_FORMATTER.format(value);
   };
 
+  const getGroupDisplayName = (group: QuoteItem[]) => {
+    const selectedWithName = group.find(item => item.selected && (item.nome_produto || '').trim());
+    if (selectedWithName?.nome_produto) {
+      return selectedWithName.nome_produto;
+    }
+
+    const longestName = group
+      .map(item => (item.nome_produto || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length)[0];
+
+    return longestName || 'Produto sem descrição';
+  };
+
   const normalizeQuantity = (value?: number | null) => {
     if (!Number.isFinite(value)) return 1;
     return Math.max(1, Math.floor(Number(value)));
@@ -437,6 +451,8 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
 
           <div className="space-y-4">
             {products.map(({ productKey, group, sorted, recommended, savingsPotential }) => {
+              const displayProductName = getGroupDisplayName(group);
+
               return (
                 <div key={productKey} className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm hover:border-blue-200 transition-all group/card">
                   <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -444,8 +460,10 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
                       <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-sm">
                         <Package size={20} className="text-blue-500" />
                       </div>
-                      <div>
-                        <span className="text-sm font-black text-slate-800 uppercase tracking-tight block leading-none">{group[0].nome_produto}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-black text-slate-800 tracking-tight block leading-snug whitespace-normal break-words">
+                          {displayProductName}
+                        </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{group.length} fornecedores</span>
                       </div>
                     </div>

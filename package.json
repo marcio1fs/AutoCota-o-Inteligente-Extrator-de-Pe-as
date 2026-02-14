@@ -11,6 +11,7 @@
     "dev:server": "node server/index.js",
     "dev:all": "concurrently -k -n FRONT,BACK -c cyan,green \"npm run dev\" \"npm run dev:server\"",
     "check:db": "node server/scripts/checkPostgres.mjs",
+    "check:smtp": "node server/scripts/checkSmtp.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test server/tests/**/*.test.mjs"
