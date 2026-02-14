@@ -3,22 +3,38 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.js",
+    "dev:all": "concurrently -k -n FRONT,BACK -c cyan,green \"npm run dev\" \"npm run dev:server\"",
+    "check:db": "node server/scripts/checkPostgres.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test server/tests/**/*.test.mjs"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "@google/genai": "^1.41.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.0",
+    "express": "^5.2.1",
+    "lucide-react": "^0.562.0",
+    "nodemailer": "^8.0.1",
+    "pg": "^8.18.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@google/genai": "^1.34.0",
-    "lucide-react": "^0.562.0",
-    "xlsx": "0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
+    "@types/node": "^25.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.1",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.0.18"
   }
 }

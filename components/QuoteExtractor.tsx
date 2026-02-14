@@ -1,9 +1,9 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { FileText, Send, Loader2, CheckCircle2, AlertCircle, Upload, X, FileCheck, Image as ImageIcon, Sparkles, FileSpreadsheet } from 'lucide-react';
-import { extractQuotesFromText, FileData } from '../services/geminiService';
+import { extractQuotesFromText, FileData, validateGeminiApiKey, GeminiValidationStatus } from '../services/geminiService';
 import { QuoteItem } from '../types';
-import * as XLSX from 'xlsx';
+import { recordScreenMetric } from '../services/performanceMonitor';
 
 interface QuoteExtractorProps {
   onItemsExtracted: (items: QuoteItem[]) => void;
@@ -14,7 +14,30 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [apiValidation, setApiValidation] = useState<{ loading: boolean; valid: boolean | null; status: GeminiValidationStatus | null; message: string }>({
+    loading: true,
+    valid: null,
+    status: null,
+    message: 'Validando chave Gemini...'
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const runValidation = async () => {
+      setApiValidation({ loading: true, valid: null, status: null, message: 'Validando chave Gemini...' });
+      const result = await validateGeminiApiKey();
+      if (!active) return;
+      setApiValidation({ loading: false, valid: result.valid, status: result.status, message: result.message });
+    };
+
+    void runValidation();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -32,21 +55,27 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        try {
+        const parseAsync = async () => {
+          try {
+          const XLSX = await import('xlsx');
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          let fullText = '';
-          
-          workbook.SheetNames.forEach(sheetName => {
+          const textChunks: string[] = [];
+
+          for (const sheetName of workbook.SheetNames) {
             const worksheet = workbook.Sheets[sheetName];
             const csv = XLSX.utils.sheet_to_csv(worksheet);
-            fullText += `--- Planilha: ${sheetName} ---\n${csv}\n\n`;
-          });
-          
-          resolve(fullText);
-        } catch (err) {
-          reject(new Error("Falha ao ler o arquivo Excel. Verifique se o arquivo não está corrompido."));
-        }
+            textChunks.push(`--- Planilha: ${sheetName} ---\n${csv}\n\n`);
+            await new Promise<void>(resolveYield => window.setTimeout(resolveYield, 0));
+          }
+
+          resolve(textChunks.join(''));
+          } catch (err) {
+            reject(new Error("Falha ao ler o arquivo Excel. Verifique se o arquivo não está corrompido."));
+          }
+        };
+
+        void parseAsync();
       };
       reader.onerror = () => reject(new Error("Erro ao ler o arquivo."));
       reader.readAsArrayBuffer(file);
@@ -67,9 +96,15 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
       return;
     }
 
+    const startedAt = performance.now();
+
     setLoading(true);
     setError(null);
-    try {
+
+    const processAsync = async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+      try {
       let fileData: FileData | undefined;
       let combinedText = inputText;
 
@@ -95,17 +130,43 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
 
       const results = await extractQuotesFromText(combinedText, fileData);
       onItemsExtracted(results);
+      recordScreenMetric('extractor', 'process_quote', performance.now() - startedAt, {
+        warnThresholdMs: 220,
+        details: { itemsExtracted: results.length, hasFile: Boolean(selectedFile) },
+      });
       setInputText('');
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+
+      } catch (err: any) {
+        recordScreenMetric('extractor', 'process_quote_error', performance.now() - startedAt, {
+          warnThresholdMs: 150,
+        });
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void processAsync();
   };
 
   const isExcelFile = selectedFile?.name.endsWith('.xlsx') || selectedFile?.name.endsWith('.xls');
+  const validationToneClass = apiValidation.loading
+    ? 'text-blue-700'
+    : apiValidation.status === 'valid'
+      ? 'text-emerald-700'
+      : apiValidation.status === 'quota'
+        ? 'text-amber-700'
+        : 'text-red-700';
+
+  const validationIcon = apiValidation.loading
+    ? '⏳'
+    : apiValidation.status === 'valid'
+      ? '✅'
+      : apiValidation.status === 'quota'
+        ? '⚠️'
+        : '❌';
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12 animate-in fade-in duration-500">
@@ -134,7 +195,7 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
           </div>
 
           <div className="flex flex-col gap-4">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Upload de Documento (PDF/Imagens/Excel)</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Upload de Excel</label>
             <div 
               onClick={() => fileInputRef.current?.click()}
               className={`flex-1 min-h-[250px] border-4 border-dashed rounded-[2rem] transition-all flex flex-col items-center justify-center p-8 cursor-pointer group ${
@@ -148,7 +209,7 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
                 ref={fileInputRef} 
                 onChange={handleFileChange} 
                 className="hidden" 
-                accept="application/pdf,image/*,.xlsx,.xls"
+                accept=".xlsx,.xls"
               />
               
               {!selectedFile ? (
@@ -157,7 +218,7 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
                     <Upload size={32} />
                   </div>
                   <p className="text-slate-600 font-black uppercase text-xs tracking-widest text-center">Clique ou Arraste um arquivo</p>
-                  <p className="text-slate-400 text-[10px] mt-2 font-medium">PDF, JPG, PNG ou EXCEL</p>
+                  <p className="text-slate-400 text-[10px] mt-2 font-medium">Apenas EXCEL (.xlsx ou .xls)</p>
                 </>
               ) : (
                 <div className="flex flex-col items-center animate-in zoom-in-95 duration-300 text-center">
@@ -191,6 +252,24 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
           </div>
         )}
 
+        {!error && (
+          <div className="mt-8 p-4 bg-blue-50 text-blue-800 rounded-2xl border border-blue-200">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={20} className="mt-0.5 flex-shrink-0" />
+              <div className="text-xs">
+                <p className="font-bold mb-1">🤖 Modo IA com fallback</p>
+                <p className="text-blue-700">
+                  O sistema tenta extração com Gemini primeiro, depois OpenRouter (fallback) e usa parser manual apenas em caso de falha.
+                  Configure <code className="bg-blue-100 px-1 rounded">VITE_GEMINI_API_KEY</code> e/ou <code className="bg-blue-100 px-1 rounded">VITE_OPENROUTER_API_KEY</code> no arquivo <code className="bg-blue-100 px-1 rounded">.env.local</code>.
+                </p>
+                <p className={`mt-2 font-semibold ${validationToneClass}`}>
+                  {validationIcon} {apiValidation.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-10 flex justify-center">
           <button
             onClick={handleProcess}
@@ -204,7 +283,7 @@ const QuoteExtractor: React.FC<QuoteExtractorProps> = ({ onItemsExtracted }) => 
             {loading ? (
               <>
                 <Loader2 className="animate-spin" size={20} />
-                Extraindo com IA...
+                Processando Cotação...
               </>
             ) : (
               <>

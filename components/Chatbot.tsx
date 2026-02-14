@@ -1,13 +1,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { Send, X, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { QuoteItem } from '../types';
+import { getSupportAgentResponseWithMetadata } from '../services/supportAgentService';
+import { clearChatMemory, loadChatMemory, saveChatMemory } from '../services/chatMemoryService';
 
 interface ChatbotProps {
   isOpen: boolean;
   onClose: () => void;
   items: QuoteItem[];
+  sessionId: string;
+  onNewSession: () => void;
 }
 
 interface Message {
@@ -15,12 +18,15 @@ interface Message {
   text: string;
 }
 
-const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items }) => {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: 'Olá! Sou seu assistente AutoQuote. Posso te ajudar a analisar as cotações, encontrar o melhor preço ou sugerir marcas. Como posso ajudar?' }
-  ]);
+const INITIAL_BOT_MESSAGE = 'Olá! Sou seu assistente AutoQuote do sistema completo. Posso ajudar em dúvidas de uso, cálculos, envio SMTP, IA (Gemini/OpenRouter), histórico e diagnóstico de erros. Como posso ajudar?';
+
+const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items, sessionId, onNewSession }) => {
+  const [messages, setMessages] = useState<Message[]>([{ role: 'model', text: INITIAL_BOT_MESSAGE }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lastIntent, setLastIntent] = useState<string>('');
+  const [lastActionPlan, setLastActionPlan] = useState<string>('');
+  const [hydratedSessionId, setHydratedSessionId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,6 +37,33 @@ const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items }) => {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    const memory = loadChatMemory(sessionId);
+
+    if (!memory || memory.messages.length === 0) {
+      setMessages([{ role: 'model', text: INITIAL_BOT_MESSAGE }]);
+      setLastIntent('');
+      setLastActionPlan('');
+      setHydratedSessionId(sessionId);
+      return;
+    }
+
+    setMessages(memory.messages.map(msg => ({ role: msg.role, text: msg.text })));
+    setLastIntent(memory.lastIntent || '');
+    setLastActionPlan(memory.lastActionPlan || '');
+    setHydratedSessionId(sessionId);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (hydratedSessionId !== sessionId) return;
+
+    saveChatMemory({
+      messages,
+      lastIntent,
+      lastActionPlan,
+    }, sessionId);
+  }, [messages, lastIntent, lastActionPlan, sessionId, hydratedSessionId]);
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -40,35 +73,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items }) => {
     setLoading(true);
 
     try {
-      // Corrected initialization: use named parameter for apiKey and obtain directly from process.env.API_KEY
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
-      const contextSummary = items.length > 0 
-        ? `Temos ${items.length} cotações registradas. Itens: ${items.map(i => `${i.nome_produto} (${i.marca}) por ${i.preco_unitario} no fornecedor ${i.nome_fornecedor}`).join(', ')}.`
-        : "Não há cotações registradas no momento.";
+      const response = await getSupportAgentResponseWithMetadata(userMessage, { items });
+      setLastIntent(response.intent);
+      setLastActionPlan(response.actionPlan);
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [
-          { role: 'user', parts: [{ text: `${contextSummary}\n\nUsuário pergunta: ${userMessage}` }] }
-        ],
-        config: {
-          systemInstruction: `Você é o assistente inteligente do AutoQuote AI. 
-          Seu objetivo é ajudar o usuário a analisar cotações de peças automotivas.
-          Responda sempre em Português do Brasil.
-          Seja conciso, profissional e use formatação markdown quando útil (negrito para preços ou fornecedores).
-          Se o usuário perguntar sobre o "melhor preço", procure nos dados fornecidos o menor valor para aquele item específico.
-          Sempre que citar marcas premium como Bosch, TRW, Mahle, LUK, Cofap, mencione que são de excelente qualidade.`,
-          temperature: 0.7,
-        }
-      });
-
-      // Directly access .text property from response
-      const aiText = response.text || "Desculpe, não consegui processar sua solicitação.";
-      setMessages(prev => [...prev, { role: 'model', text: aiText }]);
+      setMessages(prev => [...prev, { role: 'model', text: response.text }]);
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Houve um erro ao conectar com minha inteligência. Tente novamente em instantes." }]);
+      setMessages(prev => [...prev, { role: 'model', text: "Houve um erro ao processar sua mensagem." }]);
     } finally {
       setLoading(false);
     }
@@ -92,9 +104,34 @@ const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items }) => {
             </div>
           </div>
         </div>
-        <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-          <X size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              setInput('');
+              setLoading(false);
+              onNewSession();
+            }}
+            className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            title="Iniciar nova sessão de chat"
+          >
+            Nova sessão
+          </button>
+          <button
+            onClick={() => {
+              clearChatMemory(sessionId);
+              setMessages([{ role: 'model', text: INITIAL_BOT_MESSAGE }]);
+              setLastIntent('');
+              setLastActionPlan('');
+            }}
+            className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            title="Limpar conversa"
+          >
+            Limpar
+          </button>
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+            <X size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -142,7 +179,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ isOpen, onClose, items }) => {
           </button>
         </div>
         <p className="text-[10px] text-center text-slate-400 mt-2 font-medium">
-          Dica: Pergunte "Qual o melhor preço para kit de embreagem?"
+          Dica: Pergunte "erro 500 no envio", "cota 429" ou "como fechar pedido sem erro".
         </p>
       </div>
     </div>

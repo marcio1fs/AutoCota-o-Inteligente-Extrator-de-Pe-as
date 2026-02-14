@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, FileSearch, Scale, Settings, Car } from 'lucide-react';
+import { LayoutDashboard, FileSearch, Scale, Settings, Car, History } from 'lucide-react';
 import { AppView } from '../types';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
     { id: AppView.EXTRACTOR, label: 'Extrair Dados', icon: FileSearch },
     { id: AppView.COMPARISON, label: 'Comparar Preços', icon: Scale },
+    { id: AppView.HISTORY, label: 'Histórico', icon: History },
   ];
 
   return (

@@ -1,32 +1,68 @@
 
-import * as XLSX from 'xlsx';
 import { QuoteItem } from '../types';
+
+let xlsxPromise: Promise<typeof import('xlsx')> | null = null;
+
+const loadXLSX = async () => {
+  if (!xlsxPromise) {
+    xlsxPromise = import('xlsx');
+  }
+  return xlsxPromise;
+};
+
+const normalizeQuantity = (value?: number | null) => {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.floor(Number(value)));
+};
+
+const normalizeUnitPrice = (value?: number | null) => {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+};
+
+const toMoney = (value: number) => Math.round(value * 100) / 100;
+
+const calculateLineTotal = (item: QuoteItem) => {
+  const quantity = normalizeQuantity(item.quantidade);
+  const unitPrice = normalizeUnitPrice(item.preco_unitario);
+  return toMoney(unitPrice * quantity);
+};
+
+const calculateItemsTotal = (items: QuoteItem[]) => {
+  return toMoney(items.reduce((acc, item) => acc + calculateLineTotal(item), 0));
+};
 
 /**
  * Exporta o mapa completo de cotação e resumos financeiros em um único arquivo.
  */
-export const exportToExcel = (allItems: QuoteItem[]) => {
+export const exportToExcel = async (allItems: QuoteItem[]) => {
   if (allItems.length === 0) return;
+
+  const XLSX = await loadXLSX();
 
   const workbook = XLSX.utils.book_new();
   const selectedItems = allItems.filter(i => i.selected);
-  const grandTotal = selectedItems.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
+  const grandTotal = calculateItemsTotal(selectedItems);
 
   // --- 1. ABA: MAPA DE COTAÇÃO COMPLETO ---
   const mapData = allItems.map(item => ({
-    'GANHADOR': item.selected ? 'SIM' : 'NÃO',
-    'PRODUTO': item.nome_produto,
+    'DESCRIÇÃO DO PRODUTO': item.nome_produto,
+    'CÓDIGO/REF': item.codigo_referencia || 'N/A',
     'MARCA': item.marca || 'N/A',
     'FORNECEDOR': item.nome_fornecedor || 'Desconhecido',
     'EMAIL': item.email_fornecedor || '',
     'TELEFONE': item.telefone_fornecedor || '',
-    'PREÇO UNITÁRIO': item.preco_unitario,
+    'PREÇO UNITÁRIO': normalizeUnitPrice(item.preco_unitario),
+    'QUANTIDADE': normalizeQuantity(item.quantidade),
+    'TOTAL ITEM': calculateLineTotal(item),
+    'SELECIONADO': item.selected ? 'SIM' : 'NÃO',
     'DATA EXTRAÇÃO': new Date().toLocaleDateString('pt-BR')
   }));
 
   const mapSheet = XLSX.utils.json_to_sheet(mapData);
   mapSheet['!cols'] = [
-    { wch: 12 }, { wch: 45 }, { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 15 }
+    { wch: 40 }, { wch: 18 }, { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 15 }, { wch: 15 }
   ];
   XLSX.utils.book_append_sheet(workbook, mapSheet, 'Mapa de Preços');
 
@@ -36,19 +72,21 @@ export const exportToExcel = (allItems: QuoteItem[]) => {
     ['RESUMO DE COMPRA'],
     ['Data da Geração:', new Date().toLocaleDateString('pt-BR')],
     [],
-    ['FORNECEDOR', 'QTD ITENS', 'TOTAL FORNECEDOR'],
+    ['FORNECEDOR', 'QTD ITENS', 'QTD PEÇAS', 'TOTAL FORNECEDOR'],
   ];
 
   suppliers.forEach(supplier => {
     const supplierItems = selectedItems.filter(i => (i.nome_fornecedor || 'Desconhecido') === supplier);
-    const supplierTotal = supplierItems.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
-    summaryRows.push([supplier, supplierItems.length, supplierTotal]);
+    const supplierPieces = supplierItems.reduce((acc, item) => acc + normalizeQuantity(item.quantidade), 0);
+    const supplierTotal = calculateItemsTotal(supplierItems);
+    summaryRows.push([supplier, supplierItems.length, supplierPieces, supplierTotal]);
   });
 
-  summaryRows.push([], ['TOTAL GERAL DO PEDIDO', '', grandTotal]);
+  const totalPieces = selectedItems.reduce((acc, item) => acc + normalizeQuantity(item.quantidade), 0);
+  summaryRows.push([], ['TOTAL GERAL DO PEDIDO', selectedItems.length, totalPieces, grandTotal]);
 
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
-  summarySheet['!cols'] = [{ wch: 35 }, { wch: 15 }, { wch: 20 }];
+  summarySheet['!cols'] = [{ wch: 35 }, { wch: 15 }, { wch: 15 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumo Financeiro');
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
@@ -57,30 +95,42 @@ export const exportToExcel = (allItems: QuoteItem[]) => {
 
 /**
  * Exporta um arquivo Excel separado para um fornecedor específico.
+ * SEMPRE exporta TODOS os itens do fornecedor, selecionados ou não.
  */
-export const exportSupplierOrder = (supplier: string, items: QuoteItem[]) => {
-  if (items.length === 0) return;
+export const exportSupplierOrder = async (supplier: string, items: QuoteItem[]) => {
+  if (items.length === 0) {
+    alert(`⚠️ Nenhum item encontrado para ${supplier}`);
+    return;
+  }
+
+  const XLSX = await loadXLSX();
 
   const workbook = XLSX.utils.book_new();
-  const data = items.map(item => ({
-    'DESCRIÇÃO DO PRODUTO': item.nome_produto,
-    'MARCA': item.marca || 'Original/N/A',
-    'PREÇO UNIT. (R$)': item.preco_unitario,
-    'QUANTIDADE': 1,
-    'TOTAL (R$)': item.preco_unitario
-  }));
+  const data = items.map(item => {
+    const quantity = normalizeQuantity(item.quantidade);
+    const unitPrice = normalizeUnitPrice(item.preco_unitario);
+
+    return {
+      'DESCRIÇÃO DO PRODUTO': item.nome_produto,
+      'MARCA': item.marca || 'Original/N/A',
+      'PREÇO UNIT. (R$)': unitPrice,
+      'QUANTIDADE': quantity,
+      'TOTAL (R$)': toMoney(unitPrice * quantity),
+      'SIMILARES': '' // Campo vazio para preenchimento manual
+    };
+  });
 
   const worksheet = XLSX.utils.json_to_sheet(data);
-  const total = items.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
+  const total = calculateItemsTotal(items);
 
   // Adiciona rodapé com total
   XLSX.utils.sheet_add_aoa(worksheet, [
     [],
-    ['', '', '', 'TOTAL DO PEDIDO:', total]
+    ['', '', '', '', `TOTAL DO PEDIDO:`, total]
   ], { origin: -1 });
 
   worksheet['!cols'] = [
-    { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }
+    { wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 30 }
   ];
 
   const timestamp = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');

@@ -8,6 +8,19 @@ interface OrderSummaryProps {
   onClose: () => void;
 }
 
+const normalizeQuantity = (value?: number | null) => {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.floor(Number(value)));
+};
+
+const normalizeUnitPrice = (value?: number | null) => {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+};
+
+const lineTotal = (item: QuoteItem) => normalizeUnitPrice(item.preco_unitario) * normalizeQuantity(item.quantidade);
+
 const OrderSummary: React.FC<OrderSummaryProps> = ({ items, onClose }) => {
   // Group items by supplier
   const orders = React.useMemo(() => {
@@ -35,7 +48,7 @@ const OrderSummary: React.FC<OrderSummaryProps> = ({ items, onClose }) => {
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {(Object.entries(orders) as [string, QuoteItem[]][]).map(([supplier, supplierItems]) => {
-            const total = supplierItems.reduce((acc, i) => acc + (i.preco_unitario || 0), 0);
+            const total = supplierItems.reduce((acc, i) => acc + lineTotal(i), 0);
             // Try to find email/phone from any item in the group
             const email = supplierItems.find(i => i.email_fornecedor)?.email_fornecedor;
             const phone = supplierItems.find(i => i.telefone_fornecedor)?.telefone_fornecedor;
@@ -74,7 +87,9 @@ const OrderSummary: React.FC<OrderSummaryProps> = ({ items, onClose }) => {
                       <tr className="text-left text-slate-400 border-b border-slate-100">
                         <th className="pb-2 pl-2">Produto</th>
                         <th className="pb-2">Marca</th>
-                        <th className="pb-2 text-right">Preço</th>
+                        <th className="pb-2 text-right">Qtd</th>
+                        <th className="pb-2 text-right">Preço Unit.</th>
+                        <th className="pb-2 text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -82,9 +97,11 @@ const OrderSummary: React.FC<OrderSummaryProps> = ({ items, onClose }) => {
                         <tr key={item.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                           <td className="py-2 pl-2 font-medium text-slate-700">{item.nome_produto}</td>
                           <td className="py-2 text-slate-500">{item.marca}</td>
+                          <td className="py-2 text-right text-slate-600">{normalizeQuantity(item.quantidade)}</td>
                           <td className="py-2 text-right font-mono text-slate-600">
-                            {item.preco_unitario?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {normalizeUnitPrice(item.preco_unitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </td>
+                          <td className="py-2 text-right font-mono text-slate-700">{lineTotal(item).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                         </tr>
                       ))}
                     </tbody>

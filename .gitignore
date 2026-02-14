@@ -16,6 +16,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.server
+.env.server.*
 
 # Editor directories and files
 .vscode/*
@@ -27,3 +29,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test/coverage artifacts
+coverage
+.nyc_output
+
+# TypeScript cache
+*.tsbuildinfo
+
+# SQLite local database
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
