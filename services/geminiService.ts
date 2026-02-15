@@ -426,7 +426,8 @@ function parseQuotesManually(text: string): QuoteItem[] {
     
     items.push({
       id: `${Date.now()}-${items.length}`,
-      nome_produto: nomeProduto.substring(0, 50),
+      item_base: line.trim(),
+      nome_produto: nomeProduto,
       codigo_referencia: codigoReferencia,
       marca: marca,
       nome_fornecedor: 'Fornecedor Padrão',
