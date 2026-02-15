@@ -240,14 +240,23 @@ const ComparisonView: React.FC<ComparisonViewProps> = ({ items, toggleSelection,
     return BRL_FORMATTER.format(value);
   };
 
+  const resolveItemFullDescription = (item: QuoteItem) => {
+    const base = (item.item_base || '').trim();
+    const name = (item.nome_produto || '').trim();
+
+    if (base && base.length >= name.length) return base;
+    return name;
+  };
+
   const getGroupDisplayName = (group: QuoteItem[]) => {
-    const selectedWithName = group.find(item => item.selected && (item.nome_produto || '').trim());
-    if (selectedWithName?.nome_produto) {
-      return selectedWithName.nome_produto;
+    const selectedItem = group.find(item => item.selected);
+    if (selectedItem) {
+      const selectedDescription = resolveItemFullDescription(selectedItem);
+      if (selectedDescription) return selectedDescription;
     }
 
     const longestName = group
-      .map(item => (item.nome_produto || '').trim())
+      .map(resolveItemFullDescription)
       .filter(Boolean)
       .sort((a, b) => b.length - a.length)[0];
 
